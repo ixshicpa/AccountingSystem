@@ -60,7 +60,7 @@ function login(msg){root.innerHTML='<div class="card" style="max-width:360px;mar
   document.getElementById("lgo").onclick=go;document.getElementById("lpw").onkeydown=e=>{if(e.key==="Enter")go()}}
 onAuthStateChanged(auth,async u=>{
   if(!u){if(started)return location.reload();return login()}
-  try{adm=(await getDoc(doc(fs,P+"admins",u.uid))).exists()}catch(e){adm=false}
+  window.__pcUid=u.uid;window.__pcAdmErr="";try{adm=(await getDoc(doc(fs,P+"admins",u.uid))).exists()}catch(e){adm=false;window.__pcAdmErr=e.code||e.message}
   started=true;
   const b=document.createElement("button");b.textContent="Sign out";b.style.cssText="position:fixed;bottom:8px;right:8px;z-index:5;padding:4px 10px;font-size:12px";b.onclick=()=>signOut(auth);document.body.appendChild(b);
   window.__pcInit();
@@ -95,7 +95,7 @@ function signup(){
     try{await db.doc("signups/"+uid).set({name,joinedAt:Date.now()})}catch(e){$("#e").textContent="Could not sign up: "+e.code;return}gate(name)};
 }
 function stopData(){if(unsubCT){unsubCT();unsubCT=null}if(unsub){unsub();unsub=null}if(unsubS){unsubS();unsubS=null}if(unsubSU){unsubSU();unsubSU=null}if(unsubRO){unsubRO();unsubRO=null}if(unsubSE){unsubSE();unsubSE=null}if(unsubAA){unsubAA();unsubAA=null}if(unsubFD){unsubFD();unsubFD=null}if(unsubPA){unsubPA();unsubPA=null}}
-function pending(name){stopData();$("#app").innerHTML=`<div class="card" style="max-width:480px;margin:30px auto"><h1>Waiting for access</h1><p>Hi <b>${esc(name)}</b>! Your account is <b>pending</b>. The admin has to set your role and department first. This page updates by itself once that is done.</p></div>`}
+function pending(name){stopData();$("#app").innerHTML=`<div class="card" style="max-width:480px;margin:30px auto"><h1>Waiting for access</h1><p>Hi <b>${esc(name)}</b>! Your account is <b>pending</b>. The admin has to set your role and department first. This page updates by itself once that is done.</p><p class="mu">If you are the admin: in Firestore, create the document <b>pc_admins/${esc(window.__pcUid||"")}</b> (any field), then refresh this page.${window.__pcAdmErr?" Admin check error: "+esc(window.__pcAdmErr):""}</p></div>`}
 function gate(name){
   if(isAdmin){prof={role:"accounting",dept:"Accounting Department",name};tab="";start();return}
   if(unsubR)unsubR();if(unsubP)unsubP();
