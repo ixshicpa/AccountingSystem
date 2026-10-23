@@ -111,7 +111,10 @@ onAuthStateChanged(auth,u=>{
 $('#go').onclick=async()=>{
   $('#lerr').textContent='';
   try{await signInWithEmailAndPassword(auth,$('#em').value.trim(),$('#pw').value)}
-  catch(e){$('#lerr').textContent='Sign-in failed: check email and password.'}
+  catch(e){
+    const hint={'auth/invalid-credential':'Wrong email or password, or this user does not exist in this Firebase project.','auth/invalid-api-key':'The apiKey in the config is wrong.','auth/api-key-not-valid.-please-pass-a-valid-api-key.':'The apiKey in the config is wrong.','auth/operation-not-allowed':'Email/Password sign-in is not enabled in Firebase Authentication.','auth/user-disabled':'This user is disabled.','auth/network-request-failed':'Network problem. Check your connection.','auth/too-many-requests':'Too many attempts. Wait a few minutes and try again.'}[e.code];
+    $('#lerr').textContent='Sign-in failed ('+(e.code||e.message)+'). '+(hint||'');
+  }
 };
 $('#out').onclick=()=>signOut(auth);
 $('#tabs').onclick=e=>{
