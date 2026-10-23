@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Petty Cash</title>
+<style>
+:root{--bg:#eceff3;--card:#fff;--ink:#14213d;--mute:#5d6678;--line:#d5dae3;--acc:#1b5e8c;--ok:#1f7a4d;--warn:#a85d00;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#10141b;--card:#181e28;--ink:#e6e9ef;--mute:#9099ab;--line:#2a3242;--acc:#6bb2e0;--ok:#55c08a;--warn:#e8a54a;--bad:#f08a82}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+header{display:flex;align-items:center;gap:12px;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:18px;margin:0;flex:1}
+header span{color:var(--mute);font-size:13px}
+nav{display:flex;gap:4px;padding:10px 20px 0;max-width:1000px;margin:auto}
+nav button{border:0;background:none;color:var(--mute);padding:8px 14px;font:inherit;cursor:pointer;border-bottom:2px solid transparent}
+nav button.on{color:var(--ink);border-color:var(--acc);font-weight:600}
+main{max-width:1000px;margin:auto;padding:16px 20px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px}
+h2{font-size:16px;margin:0 0 12px}
+.funds{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-bottom:16px}
+.fund{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.fund.on{outline:2px solid var(--acc)}
+.fund b{display:block}
+.fund .bal{font-size:24px;font-weight:700;margin:6px 0}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok)}
+.meter i.low{background:var(--warn)}
+.sub{color:var(--mute);font-size:13px}
+form.row,.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+label{display:block;font-size:13px;color:var(--mute)}
+input,select{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+button.btn{padding:9px 14px;border:0;border-radius:6px;background:var(--acc);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+@media(prefers-color-scheme:dark){button.btn{color:#08121c}}
+button.link{background:none;border:0;color:var(--bad);cursor:pointer;font:inherit;padding:0}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:13px;color:var(--mute);font-weight:600}
+td.n,th.n{text-align:right}
+.tag{font-size:12px;padding:2px 8px;border-radius:10px;border:1px solid var(--line)}
+.tag.open{color:var(--warn)}.tag.replenished{color:var(--ok)}.tag.void{color:var(--mute);text-decoration:line-through}
+.err{color:var(--bad);font-size:13px;margin-top:8px}
+.empty{color:var(--mute);padding:12px 0}
+#login{max-width:340px;margin:12vh auto;padding:0 20px}
+</style>
+</head>
+<body>
+
+<div id="login" hidden>
+  <div class="card">
+    <h2>Petty Cash — Sign in</h2>
+    <p class="err" id="cfgwarn" hidden>Firebase config not set. Paste your web app config in the script (const cfg).</p>
+    <label>Email<input id="em" type="email" autocomplete="username"></label><br>
+    <label>Password<input id="pw" type="password" autocomplete="current-password"></label><br>
+    <button class="btn" id="go">Sign in</button>
+    <div class="err" id="lerr"></div>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header><h1>Petty Cash</h1><span id="who"></span><button class="btn" id="out">Sign out</button></header>
+  <nav id="tabs">
+    <button data-t="funds" class="on">Funds &amp; vouchers</button>
+    <button data-t="rep">Replenish</button>
+    <button data-t="rpt">Report</button>
+  </nav>
+  <main>
+    <section id="t-funds"></section>
+    <section id="t-rep" hidden></section>
+    <section id="t-rpt" hidden></section>
+  </main>
+</div>
+
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,collection,addDoc,updateDoc,doc,onSnapshot,query,orderBy,serverTimestamp,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// === Firebase web app config: project "Server" (server-8ad88) ===
+const cfg={apiKey:"AIzaSyA3ATNZ-hf7YJfw8Y4Qt9afqgeL9Hga_II",authDomain:"server-8ad88.firebaseapp.com",projectId:"server-8ad88",storageBucket:"server-8ad88.firebasestorage.app",messagingSenderId:"1069854113324",appId:"1:1069854113324:web:d7264e00b7cb8d746a9b89"};
+
+const $=s=>document.querySelector(s);
+const peso=n=>new Intl.NumberFormat('en-PH',{style:'currency',currency:'PHP'}).format(n||0);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today=()=>new Date().toISOString().slice(0,10);
+const DEFAULT_CATS=['Fuel','Office supplies','Meals','Transportation','Repairs & maintenance','Cleaning supplies','Communication','Miscellaneous'];
+
+let funds=[],vch=[],reps=[],cur=null,user=null,unsubs=[];
+let app,auth,db;
+try{app=initializeApp(cfg);auth=getAuth(app);db=getFirestore(app)}catch(e){}
+if(cfg.apiKey.startsWith('PASTE'))$('#cfgwarn').hidden=false;
+
+const bal=f=>f.amount-vch.filter(v=>v.fundId===f.id&&v.status==='open').reduce((s,v)=>s+v.amount,0);
+const cats=()=>[...new Set([...DEFAULT_CATS,...vch.map(v=>v.category)])].sort();
+
+onAuthStateChanged(auth,u=>{
+  user=u;
+  $('#login').hidden=!!u;$('#app').hidden=!u;
+  unsubs.forEach(f=>f());unsubs=[];
+  if(!u)return;
+  $('#who').textContent=u.email;
+  const sub=(name,order,dir,set)=>unsubs.push(onSnapshot(query(collection(db,name),orderBy(order,dir)),s=>{set(s.docs.map(d=>({id:d.id,...d.data()})));render()},e=>alert('Cannot read '+name+': '+e.message)));
+  sub('pc_funds','createdAt','asc',x=>{funds=x;if(!cur||!funds.find(f=>f.id===cur))cur=funds[0]?.id||null});
+  sub('pc_vouchers','date','desc',x=>vch=x);
+  sub('pc_replenishments','date','desc',x=>reps=x);
+});
+$('#go').onclick=async()=>{
+  $('#lerr').textContent='';
+  try{await signInWithEmailAndPassword(auth,$('#em').value.trim(),$('#pw').value)}
+  catch(e){$('#lerr').textContent='Sign-in failed: check email and password.'}
+};
+$('#out').onclick=()=>signOut(auth);
+$('#tabs').onclick=e=>{
+  const t=e.target.dataset.t;if(!t)return;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b===e.target));
+  ['funds','rep','rpt'].forEach(k=>$('#t-'+k).hidden=k!==t);
+};
+
+function render(){renderFunds();renderRep();renderRpt()}
+
+function fundCards(){
+  if(!funds.length)return '';
+  return '<div class="funds">'+funds.map(f=>{
+    const b=bal(f),pct=Math.max(0,Math.min(100,b/f.amount*100));
+    return `<button class="fund ${f.id===cur?'on':''}" data-fund="${f.id}"><b>${esc(f.name)}</b><span class="sub">Custodian: ${esc(f.custodian||'—')}</span><div class="bal">${peso(b)}</div><div class="meter"><i class="${pct<25?'low':''}" style="width:${pct}%"></i></div><span class="sub">Fund ${peso(f.amount)}</span></button>`}).join('')+'</div>';
+}
+
+function renderFunds(){
+  const f=funds.find(x=>x.id===cur);
+  const list=vch.filter(v=>v.fundId===cur).slice(0,100);
+  $('#t-funds').innerHTML=fundCards()+
+  `<div class="card"><h2>New fund</h2><form class="row" id="ff"><label>Fund name<input name="name" required placeholder="Main office petty cash"></label><label>Fund amount (₱)<input name="amount" type="number" min="1" step="0.01" required></label><label>Custodian<input name="custodian"></label><button class="btn">Add fund</button></form></div>`+
+  (f?`<div class="card"><h2>New voucher — ${esc(f.name)}</h2><form class="row" id="vf"><label>Date<input name="date" type="date" value="${today()}" required></label><label>Voucher no.<input name="no" value="PC-${String(vch.filter(v=>v.fundId===cur).length+1).padStart(4,'0')}" required></label><label>Payee<input name="payee" required></label><label>Category<input name="category" list="cl" required></label><datalist id="cl">${cats().map(c=>`<option value="${esc(c)}">`).join('')}</datalist><label>Description<input name="desc"></label><label>Amount (₱)<input name="amount" type="number" min="0.01" step="0.01" required></label><button class="btn">Save voucher</button></form></div>
+  <div class="card"><h2>Vouchers</h2>${list.length?`<div class="tw"><table><tr><th>Date<th>No.<th>Payee<th>Category<th>Description<th class="n">Amount<th>Status<th></tr>${list.map(v=>`<tr><td>${v.date}<td>${esc(v.no)}<td>${esc(v.payee)}<td>${esc(v.category)}<td>${esc(v.desc)}<td class="n">${peso(v.amount)}<td><span class="tag ${v.status}">${v.status==='open'?'not replenished':v.status}</span><td>${v.status==='open'?`<button class="link" data-void="${v.id}">Void</button>`:''}`).join('')}</table></div>`:'<div class="empty">No vouchers yet. Add the first one above.</div>'}</div>`:'<div class="empty">Add your first petty cash fund to start.</div>');
+}
+
+function renderRep(){
+  const f=funds.find(x=>x.id===cur);
+  if(!f){$('#t-rep').innerHTML='<div class="empty">Add a fund first.</div>';return}
+  const open=vch.filter(v=>v.fundId===cur&&v.status==='open'),tot=open.reduce((s,v)=>s+v.amount,0);
+  const by={};open.forEach(v=>by[v.category]=(by[v.category]||0)+v.amount);
+  $('#t-rep').innerHTML=fundCards()+`<div class="card"><h2>Replenish — ${esc(f.name)}</h2>
+  ${open.length?`<p>Vouchers to replenish: <b>${open.length}</b> · Amount to replenish: <b>${peso(tot)}</b> · Cash on hand should be <b>${peso(f.amount-tot)}</b></p>
+  <div class="tw"><table><tr><th>Category<th class="n">Amount</tr>${Object.entries(by).map(([c,a])=>`<tr><td>${esc(c)}<td class="n">${peso(a)}`).join('')}</table></div><br>
+  <form class="row" id="rf"><label>Date<input name="date" type="date" value="${today()}" required></label><label>Method<select name="method"><option>Cheque</option><option>Bank withdrawal</option><option>Transfer</option><option>Cash</option></select></label><label>Reference no.<input name="ref"></label><button class="btn">Record replenishment of ${peso(tot)}</button></form>`:'<div class="empty">Nothing to replenish. The fund is full.</div>'}</div>
+  <div class="card"><h2>Replenishment history</h2>${reps.filter(r=>r.fundId===cur).length?`<div class="tw"><table><tr><th>Date<th>Method<th>Ref<th class="n">Vouchers<th class="n">Amount</tr>${reps.filter(r=>r.fundId===cur).map(r=>`<tr><td>${r.date}<td>${esc(r.method)}<td>${esc(r.ref)}<td class="n">${r.count}<td class="n">${peso(r.total)}`).join('')}</table></div>`:'<div class="empty">No replenishments yet.</div>'}</div>`;
+}
+
+let rptMonth=today().slice(0,7);
+function monthRows(){return vch.filter(v=>v.status!=='void'&&v.date.startsWith(rptMonth))}
+function renderRpt(){
+  const rows=monthRows(),by={};rows.forEach(v=>by[v.category]=(by[v.category]||0)+v.amount);
+  const tot=rows.reduce((s,v)=>s+v.amount,0);
+  $('#t-rpt').innerHTML=`<div class="card"><h2>Expenses by category</h2><div class="row" style="max-width:420px"><label>Month<input type="month" id="rm" value="${rptMonth}"></label><button class="btn" id="csv">Download CSV</button></div><br>
+  ${rows.length?`<div class="tw"><table><tr><th>Category<th class="n">Amount</tr>${Object.entries(by).sort((a,b)=>b[1]-a[1]).map(([c,a])=>`<tr><td>${esc(c)}<td class="n">${peso(a)}`).join('')}<tr><th>Total<th class="n">${peso(tot)}</tr></table></div>`:'<div class="empty">No vouchers in this month.</div>'}</div>`;
+}
+
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-fund],[data-void],#csv');if(!t)return;
+  if(t.dataset.fund){cur=t.dataset.fund;render()}
+  else if(t.dataset.void){if(confirm('Void this voucher? It will no longer count against the fund.'))await updateDoc(doc(db,'pc_vouchers',t.dataset.void),{status:'void',voidedBy:user.email})}
+  else if(t.id==='csv'){
+    const h=['Date','Voucher no','Fund','Payee','Category','Description','Amount','Status'];
+    const q=x=>'"'+String(x??'').replace(/"/g,'""')+'"';
+    const csv=[h.map(q).join(',')].concat(monthRows().map(v=>[v.date,v.no,funds.find(f=>f.id===v.fundId)?.name,v.payee,v.category,v.desc,v.amount,v.status].map(q).join(','))).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`petty-cash-${rptMonth}.csv`;a.click();
+  }
+});
+document.addEventListener('change',e=>{if(e.target.id==='rm'){rptMonth=e.target.value||rptMonth;renderRpt()}});
+
+document.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const fd=Object.fromEntries(new FormData(e.target)),id=e.target.id;
+  try{
+    if(id==='ff'){
+      const r=await addDoc(collection(db,'pc_funds'),{name:fd.name,amount:+fd.amount,custodian:fd.custodian,createdAt:serverTimestamp(),createdBy:user.email});
+      cur=r.id;
+    }else if(id==='vf'){
+      const f=funds.find(x=>x.id===cur),amt=+fd.amount;
+      if(amt>bal(f)&&!confirm(`This voucher (${peso(amt)}) is more than the cash left in the fund (${peso(bal(f))}). Save anyway?`))return;
+      await addDoc(collection(db,'pc_vouchers'),{fundId:cur,date:fd.date,no:fd.no,payee:fd.payee,category:fd.category.trim(),desc:fd.desc,amount:amt,status:'open',outflowId:null,createdAt:serverTimestamp(),createdBy:user.email});
+    }else if(id==='rf'){
+      const open=vch.filter(v=>v.fundId===cur&&v.status==='open'),total=open.reduce((s,v)=>s+v.amount,0);
+      if(!confirm(`Record replenishment of ${peso(total)} for ${open.length} vouchers?`))return;
+      const b=writeBatch(db),rr=doc(collection(db,'pc_replenishments'));
+      b.set(rr,{fundId:cur,date:fd.date,method:fd.method,ref:fd.ref,total,count:open.length,outflowId:null,createdAt:serverTimestamp(),createdBy:user.email});
+      open.forEach(v=>b.update(doc(db,'pc_vouchers',v.id),{status:'replenished',replenishmentId:rr.id}));
+      await b.commit();
+    }
+    e.target.reset();
+  }catch(err){alert('Could not save: '+err.message)}
+});
+</script>
+</body>
+</html>
